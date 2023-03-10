@@ -1,6 +1,6 @@
 ---
 - name: Install New NEO
-  hosts: tniad
+  hosts: nmsserver
   vars_files:
     - vars/neo
     - vars/api
