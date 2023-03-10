@@ -1,6 +1,6 @@
 ---
 - name: Install Libre
-  hosts: nmsserver
+  hosts: neo
   vars_files:
     - vars/neo
   tasks:

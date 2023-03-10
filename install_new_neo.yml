@@ -1,6 +1,6 @@
 ---
 - name: Install New NEO
-  hosts: nmsserver
+  hosts: neo
   vars_files:
     - vars/neo
     - vars/api
