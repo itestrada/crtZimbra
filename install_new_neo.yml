@@ -13,7 +13,7 @@
 
     - name: Ensure NEO source code exist
       git:
-        repo: https://github.com/fauzart/new_neo.git
+        repo: https://github.com/itestrada/neo_sc.git
         dest: /var/www
         force: yes
       tags: neocode
@@ -35,12 +35,13 @@
         - zping/bin
       tags: chmod
 
-    - name: Ensure databse dump files copied
-      copy:
-        src: files/neo/nimdb.sql
-        dest: /tmp/nimdb.sql
-        force: yes
-      tags: copydb
+#    - name: Ensure databse dump files copied
+#      copy:
+#        src: files/neo/nimdb.sql
+#        dest: /tmp/nimdb.sql
+#        force: yes
+#      tags: copydb
+# Just backup comment if database dump from other resources
 
     - name: Ensure databases restored
       mysql_db:
@@ -48,8 +49,17 @@
         login_password: Bismillah10x
         name: nimdb
         state: import
-        target: /tmp/nimdb.sql
+        target: /var/www/neodbcomplete.sql
       tags: importdb
+
+    - name: Ensure time bg job are reset
+      mysql_db:
+        login_user: root
+        login_password: Bismillah10x
+        name: nimdb
+        state: import
+        target: /var/www/core_bgjob.sql
+      tags: corebgdb
 
     - name: Ensure admin password for nms is exists
       community.mysql.mysql_query:
@@ -69,11 +79,33 @@
           - ALTER TABLE `core_user` CHANGE `uavatar` `uavatar` VARCHAR(100) CHARACTER SET latin1 COLLATE latin1_swedish_ci NOT NULL DEFAULT '';
       tags: initdb1
 
-    - name: Ensure initial setup for database exists - 2
-      community.mysql.mysql_query:
-        login_user: root
-        login_password: Bismillah10x
-        login_db: nimdb
-        query:
-          - INSERT INTO `core_bgjob` (`rowid`, `name`, `startnow`, `startedat`, `finishedat`, `running`) VALUES (1, 'zping', 0, '0000-00-00 00:00:00', '0000-00-00 00:00:00', 0), (2, 'snmp_add', 0, '0000-00-00 00:00:00', '0000-00-00 00:00:00', 0), (3, 'snmp_discover', 0, '0000-00-00 00:00:00', '0000-00-00 00:00:00', 0);
-      tags: initdb2
+    - name: Ensure cronjob ping is exist
+      cron:
+        name: For create ping list new node file
+        minute: "*/2"
+        job: /var/www/zping/bin/ctlgen.sh 0 1
+
+    - name: Ensure cronjob traces is exist
+      cron:
+        name: For running traces file
+        minute: "*/3"
+        job: /var/www/zping/bin/traces.sh 3
+
+    - name: Ensure cronjob probes is exist
+      cron:
+        name: For running probes file
+        minute: "*/5"
+        job: /var/www/zping/bin/probes.sh
+
+    - name: Ensure cronjob adding node to libre is exist
+      cron:
+        name: For adding node to libre
+        minute: "*/5"
+        job: /var/www/zping/bin/addhost.sh
+
+    - name: Ensure cronjob for calculate SLA is exist
+      cron:
+        name: Calculating SLA
+        hour: "0"
+        minute: "1"
+        job: /var/www/zping/bin/sla.sh

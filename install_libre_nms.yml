@@ -85,18 +85,18 @@
       tags: rootpass2
       ignore_errors: yes
 
-#    - name: Ensure root mysql account configured
-#      mysql_secure_installation:
-#        login_password: ''
-#        new_password: 'Bismillah10x'
-#        user: root
-#        hosts: ['localhost', '127.0.0.1', '::1']
-#        change_root_password: true
-#        remove_anonymous_user: true
-#        disallow_root_login_remotely: false
-#        remove_test_db: true
-#      register: secure
-#      tags: rootsql
+    - name: Ensure root mysql account configured
+      mysql_secure_installation:
+        login_password: ''
+        new_password: 'Bismillah10x'
+        user: root
+        hosts: ['localhost', '127.0.0.1', '::1']
+        change_root_password: true
+        remove_anonymous_user: true
+        disallow_root_login_remotely: false
+        remove_test_db: true
+      register: secure
+      tags: rootsql
 
     - debug: var=secure.stdout_lines
       tags: debug
