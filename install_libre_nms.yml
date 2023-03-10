@@ -1,0 +1,286 @@
+---
+- name: Install Libre
+  hosts: dev-ansible
+  vars_files:
+    - vars/neo
+  tasks:
+    - name: Ensure EPEL installed
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ epel }}"
+      tags: epelinstall
+
+    - name: Ensure Yum manager installed
+      yum:
+        name: yum-utils
+        state: present
+      tags: yumutils
+
+    - name: Ensure Wget installed
+      yum:
+        name: wget
+        state: present
+      tags: wget
+
+    - name: Ensure remi-php81 enabled
+      shell: yum-config-manager --enable remi-php81
+      args:
+        executable: /bin/bash
+      tags: php81enable
+  
+    - name: Ensure latest MariaDB repo is updated
+      shell: wget https://downloads.mariadb.com/MariaDB/mariadb_repo_setup -P /root/
+      args:
+        executable: /bin/bash
+      tags: mariarepo
+
+    - name: Ensure permission mariadb files
+      file:
+        path: /root/mariadb_repo_setup
+        mode: u+x,g+x,o+x
+      tags: mariafileperm
+
+    - name: Ensure latest MariaDB setup 
+      shell: /root/mariadb_repo_setup
+      args:
+        executable: /bin/bash
+      tags: mariasetup
+
+    - name: Check all dependencies package installed
+      yum:
+        name: "{{ item }}"
+        state: latest
+      loop: "{{ packages }}"
+      tags: pkginstall
+
+    - name: Ensure port 8080 listened
+      lineinfile:
+        path: /etc/httpd/conf/httpd.conf
+        line: "Listen 8080"
+        state: present
+      tags: port8080
+
+    - name: Ensure all packages are running
+      service:
+        name: "{{ item }}"
+        state: started
+        enabled: yes
+      loop: "{{ service }}"
+      tags: servicerun
+
+    - name: Set root password
+      mysql_user:
+        user: root
+        password: Bismillah10x
+      tags: rootpass
+      ignore_errors: yes
+
+    - name: Set root password for other hosts
+      mysql_user:
+        user: root
+        password: Bismillah10x
+        login_user: root
+        login_password: Bismillah10x
+      tags: rootpass2
+      ignore_errors: yes
+
+#    - name: Ensure root mysql account configured
+#      mysql_secure_installation:
+#        login_password: ''
+#        new_password: 'Bismillah10x'
+#        user: root
+#        hosts: ['localhost', '127.0.0.1', '::1']
+#        change_root_password: true
+#        remove_anonymous_user: true
+#        disallow_root_login_remotely: false
+#        remove_test_db: true
+#      register: secure
+#      tags: rootsql
+
+    - debug: var=secure.stdout_lines
+      tags: debug
+     
+    - name: Root database access
+      mysql_user:
+        login_user: root
+        login_password: Bismillah10x
+        name: root
+        password: Bismillah10x
+        priv: '*.*:ALL,GRANT'
+        state: present
+      tags: rootg
+ 
+    - name: Ensure all port needed are allowed
+      firewalld:
+        port: "{{ item }}"
+        state: enabled
+        permanent: yes
+        zone: public
+        immediate: yes
+      loop: 
+        - 80/tcp
+        - 443/tcp
+        - 8080/tcp
+      tags: firewall
+
+    - name: Ensure libnms user exist
+      shell: useradd librenms -d /opt/libnms -M -r
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      tags: userlibnm
+
+    - name: Ensure apache in libre group
+      shell: usermod -a -G librenms apache
+      args:
+        executable: /bin/bash
+      ignore_errors: true
+      tags: groupapache
+
+    - name: Ensure libre source code exist
+      git:
+        repo: https://github.com/librenms/librenms.git
+        dest: /opt/libnms
+        force: yes
+      tags: libsc
+
+    - name: Ensure ownership librefolder
+      file:
+        path: /opt/libnms
+        owner: librenms
+        group: librenms
+        recurse: yes
+        mode: u+rwx,g+rwx,o-rwx
+      tags: ownership folder
+
+    - name: Ensure acl folder are config
+      shell: setfacl -d -m g::rwx /opt/libnms/rrd /opt/libnms/logs /opt/libnms/bootstrap/cache/ /opt/libnms/storage/ /opt/libnms/cache
+      args:
+        executable: /bin/bash
+      tags: acl1
+
+    - name: Ensure acl folder are recursive
+      shell: setfacl -R -m g::rwx /opt/libnms/rrd /opt/libnms/logs /opt/libnms/bootstrap/cache/ /opt/libnms/storage/ /opt/libnms/cache
+      args:
+        executable: /bin/bash
+      tags: acl2
+
+    - name: Installing libre nms
+      shell: sudo -u librenms /opt/libnms/scripts/composer_wrapper.php install --no-dev
+      args:
+        executable: /bin/bash
+      register: restarted
+      tags: libins
+
+    - debug: var=restarted.stdout_lines
+      tags: debug
+
+    - name: Ensure libre database exist
+      mysql_db:
+        login_user: root
+        login_password: Bismillah10x
+        name: libdb
+        state: present
+
+    - name: Ensure NMS database exist
+      mysql_db:
+        login_user: root
+        login_password: Bismillah10x
+        name: nimdb
+        state: present
+
+    - name: Setup libre database user
+      mysql_user:
+        login_user: root
+        login_password: Bismillah10x
+        name: libnms
+        password: Bismillah3x
+        priv: 'libdb.*:ALL,GRANT'
+      tags: libuser
+
+    - name: Setup NMS database user
+      mysql_user:
+        login_user: root
+        login_password: Bismillah10x
+        name: nimnms
+        password: Bismillah3x
+        priv: 'nimdb.*:ALL,GRANT'
+      tags: nmsuser
+
+    - name: Ensure libre httpd config exist
+      copy:
+        src: files/neo/libnms.conf
+        dest: /etc/httpd/conf.d/libnms.conf
+        force: yes
+      tags: libhttp
+
+    - name: Ensure mysql configured
+      copy:
+        src: files/neo/my.cnf
+        dest: /etc/my.cnf
+        force: yes
+      tags: myconf
+
+    - name: Ensure SELINUX are disabled
+      selinux:
+        policy: targeted
+        state: disabled
+      tags: selinux
+
+    - name: Ensure fping configured
+      copy:
+        src: files/neo/http_fping.tt
+        dest: /opt/libnms/http_fping.tt
+        force: yes
+      tags: fpinconf
+
+    - name: Ensure example snmp copied
+      copy:
+        src: /opt/libnms/snmpd.conf.example
+        dest: /etc/snmp/snmpd.conf
+        remote_src: yes
+        force: yes
+
+    - name: Get snmp distro
+      shell: curl -o /usr/bin/distro https://raw.githubusercontent.com/librenms/librenms-agent/master/snmp/distro && chmod a+x /usr/bin/distro
+      args:
+        executable: /bin/bash
+      tags: distrosnmp
+
+    - name: Restart SNMP
+      service:
+        name: snmpd
+        state: restarted
+      register: snmprestart
+      tags: snmprestart
+
+    - debug: var=snmprestart.stdout_lines
+      tags: debug
+
+    - name: Copy file libre cron
+      copy:
+        src: /opt/libnms/librenms.nonroot.cron
+        dest: /etc/cron.d/libnms
+        remote_src: yes
+        force: yes
+      tags: librecron
+
+    - name: Copy file libre cron
+      copy:
+        src: /opt/libnms/misc/librenms.logrotate
+        dest: /etc/logrotate.d/libnms
+        remote_src: yes
+        force: yes
+      tags: librecron
+
+    - name: Ensure php time are configured
+      lineinfile:
+        path: /etc/php.ini
+        line: 'date.timezone = "Asia/Jakarta"'
+        state: present
+      tags: timephp
+
+    - name: Reboot devices after all
+      reboot:
+      tags: reboot

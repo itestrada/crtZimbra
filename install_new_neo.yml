@@ -1,0 +1,79 @@
+---
+- name: Install New NEO
+  hosts: tniad
+  vars_files:
+    - vars/neo
+    - vars/api
+  tasks:
+    - name: Ensure var www is empty
+      shell: rm -rf /var/www
+      args:
+        executable: /bin/bash
+      tags: clearwww
+
+    - name: Ensure NEO source code exist
+      git:
+        repo: https://github.com/fauzart/new_neo.git
+        dest: /var/www
+        force: yes
+      tags: neocode
+
+    - name: Ensure API Libre is connected to NEO
+      lineinfile:
+        path: /var/www/html/inc.common.php
+        regex: '$lib_token=(.)+;'
+        line: '$lib_token={{ token }};'
+      tags: apilibre
+
+    - name: Ensure permission db sh correct
+      file:
+        path: /var/www/{{ item }}
+        mode: u+x,g+x,o+x
+        recurse: yes 
+      loop:
+        - cgi-bin
+        - zping/bin
+      tags: chmod
+
+    - name: Ensure databse dump files copied
+      copy:
+        src: files/neo/nimdb.sql
+        dest: /tmp/nimdb.sql
+        force: yes
+      tags: copydb
+
+    - name: Ensure databases restored
+      mysql_db:
+        login_user: root
+        login_password: Bismillah10x
+        name: nimdb
+        state: import
+        target: /tmp/nimdb.sql
+      tags: importdb
+
+    - name: Ensure admin password for nms is exists
+      community.mysql.mysql_query:
+        login_user: root
+        login_password: Bismillah10x
+        login_db: nimdb
+        query:
+          - INSERT INTO `core_user` (`rowid`, `uid`, `uname`, `upwd`, `ulvl`, `ugrp`, `uprof`, `uavatar`) VALUES (1, 'admin', 'Default Admin', '0cc175b9c0f1b6a831c399e269772661', 0, '', '', '');
+      tags: adminuser
+
+    - name: Ensure initial setup for database exists - 1
+      community.mysql.mysql_query:
+        login_user: root
+        login_password: Bismillah10x
+        login_db: nimdb
+        query:
+          - ALTER TABLE `core_user` CHANGE `uavatar` `uavatar` VARCHAR(100) CHARACTER SET latin1 COLLATE latin1_swedish_ci NOT NULL DEFAULT '';
+      tags: initdb1
+
+    - name: Ensure initial setup for database exists - 2
+      community.mysql.mysql_query:
+        login_user: root
+        login_password: Bismillah10x
+        login_db: nimdb
+        query:
+          - INSERT INTO `core_bgjob` (`rowid`, `name`, `startnow`, `startedat`, `finishedat`, `running`) VALUES (1, 'zping', 0, '0000-00-00 00:00:00', '0000-00-00 00:00:00', 0), (2, 'snmp_add', 0, '0000-00-00 00:00:00', '0000-00-00 00:00:00', 0), (3, 'snmp_discover', 0, '0000-00-00 00:00:00', '0000-00-00 00:00:00', 0);
+      tags: initdb2
