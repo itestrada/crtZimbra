@@ -1,0 +1,13 @@
+packages_need:
+   - epel-release
+   - certbot
+server_hostname : mail.estrada.co.id
+email_it : admin_it@estrada.co.id
+ssl_files:
+   - cert.pem
+   - chain.pem
+   - fullchain.pem
+   - privkey.pem
+service_zimbra:
+   - zmproxyctl
+ssl_zimbra_dir : /opt/zimbra/ssl/letsencrypt/

@@ -1,0 +1,106 @@
+---
+- name: Install or Renew SSL Zimbra Mail Server
+  hosts: mailserver
+  vars_files:
+    - group_vars/zimbra
+  tasks:
+    - name: Ensure Dependency Installed
+      yum:
+        name: "{{ item }}"
+        state: present
+      loop: "{{ packages_need }}"
+      tags: packages
+
+    - name: Temporary stop the services
+      shell: source /opt/zimbra/.bashrc && ./"{{ item }}" stop
+      args:
+        executable: /bin/bash
+        chdir: '/opt/zimbra/bin/'
+      become: true
+      become_user: zimbra
+      loop: "{{ service_zimbra }}"
+      tags: services
+
+    - name: Create Lets Encrypt SSL
+      command: certbot certonly --standalone -d {{ server_hostname }} --force-renewal --agree-tos -n -m admin_it@estrada.co.id --keep-until-expiring
+      tags: sslcreating
+
+    - name: Ensure CA Exist
+      file:
+        path: /opt/zimbra/ssl/letsencrypt/ca.pem
+        state: file
+      tags: caexist
+
+    - name: Copy SSL to zimbra directory
+      copy:
+        src: /etc/letsencrypt/live/{{ server_hostname }}-0001/{{ item }}
+        dest: "{{ ssl_zimbra_dir }}"
+        force: yes
+        remote_src: true
+      loop: "{{ ssl_files }}"
+      tags: copyfile
+
+    - name: Combine CA and Chain
+      shell: cat ca.pem > zimbra_chain.pem && head -n 30 chain.pem >> zimbra_chain.pem
+      args:
+        chdir: "{{ ssl_zimbra_dir }}"
+      tags: chain
+
+    - name: Set files permission
+      file:
+        path: "{{ ssl_zimbra_dir }}"
+        recurse: yes
+        owner: zimbra
+        group: zimbra
+      tags: permission
+
+    - name: Verify new SSL
+      shell: /opt/zimbra/bin/zmcertmgr verifycrt comm /opt/zimbra/ssl/letsencrypt/privkey.pem /opt/zimbra/ssl/letsencrypt/cert.pem /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
+      args:
+        executable: /bin/bash
+        chdir: '/opt/zimbra/bin/'
+      become: true
+      become_method: sudo
+      become_user: zimbra
+      register: verify
+      tags: verifying
+
+    - debug: var=verify.stdout_lines
+      tags: debug
+
+    - name: Copy keychain to zimbra directory
+      file:
+        src: /opt/zimbra/ssl/letsencrypt/privkey.pem
+        dest: /opt/zimbra/ssl/zimbra/commercial/commercial.key
+        force: yes
+        owner: zimbra
+        group: zimbra
+      tags: copykeychain
+
+    - name: Deploy new SSL
+      shell: /opt/zimbra/bin/zmcertmgr deploycrt comm /opt/zimbra/ssl/letsencrypt/cert.pem /opt/zimbra/ssl/letsencrypt/zimbra_chain.pem
+      args:
+        executable: /bin/bash
+        chdir: '/opt/zimbra/bin/'
+      become: true
+      become_method: sudo
+      become_user: zimbra
+      register: deployed
+      tags: deploying
+
+    - debug: var=deployed.stdout_lines
+      tags: debug
+
+    - name: Restart zimbra Server
+      shell: /opt/zimbra/bin/zmcontrol restart 
+      args:
+        executable: /bin/bash
+        chdir: '/opt/zimbra/bin/'
+      become: true
+      become_method: sudo
+      become_user: zimbra
+      register: restarted
+      tags: restarting
+
+    - debug: var=restarted.stdout_lines
+      tags: debug
